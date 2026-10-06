@@ -8,7 +8,62 @@
 
 using namespace std;
 
-int Send_msg(int client1Socket, int client2Socket)
+int createServerSocket(sockaddr_in *serverAddr)
+{
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (sock == -1)
+    {
+        cout << "Socket failed!" << endl;
+        return -1;
+    }
+    cout << "socket initialized successfully!" << endl;
+    
+    serverAddr->sin_family = AF_INET;
+    serverAddr->sin_port = htons(5000);
+    serverAddr->sin_addr.s_addr = INADDR_ANY;
+    return sock;
+}
+
+bool bindServer(int sock, sockaddr_in *serverAddr)
+{
+    if (bind(sock, (sockaddr*)serverAddr, sizeof(*serverAddr)) == -1)
+    {
+        cout << "Bind failed !" << endl;
+        close(sock);
+        return false;
+    }
+    cout << "Bind initialized successfully!" << endl;
+    return true;
+}
+
+bool listenServer(int sock)
+{
+    if (listen(sock, backlog) == -1)
+    {
+        cout << "Listen failed !" << endl;
+        close(sock);
+        return false;
+    }
+    cout << "Listen initialized successfully!" << endl;
+    return true;
+}
+
+int acceptClient(int sock, sockaddr_in *clientAddr)
+{
+    socklen_t clientAddr1Size = sizeof(*clientAddr);
+    int clientSocket = accept(sock, (sockaddr*)clientAddr, &clientAddr1Size);
+    if (clientSocket == -1)
+    {
+        cout << "Client Socket failed!" << endl;
+        close(sock);
+        return -1;
+    }
+    cout << "Client Connected successfully!" << endl;
+    return clientSocket;
+}
+
+int forwardMessage(int client1Socket, int client2Socket)
 {
     char buffer[1024];
     int result = recv(client1Socket, buffer, sizeof(buffer) - 1, 0);
@@ -25,65 +80,30 @@ int Send_msg(int client1Socket, int client2Socket)
 
 int main()
 {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (sock == -1)
-    {
-        cout << "Socket failed!" << endl;
-        return 1;
-    }
-    cout << "socket initialized successfully!" << endl;
-    
     sockaddr_in serverAddr{};
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(5000);
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    int sock = createServerSocket(&serverAddr);
+    if (sock == -1)
+        return 1;
 
+    if (!bindServer(sock, &serverAddr))
+        return 1;
+
+    if (!listenServer(sock))
+        return 1;
     
-    if (bind(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1)
-    {
-        cout << "Bind failed !" << endl;
-        close(sock);
-        return 1;
-    }
-    cout << "Bind initialized successfully!" << endl;
-
-    if (listen(sock, backlog) == -1)
-    {
-        cout << "Listen failed !" << endl;
-        close(sock);
-        return 1;
-    }
-    cout << "Listen initialized successfully!" << endl;
-
     sockaddr_in clientAddr1{};
-
-    socklen_t clientAddr1Size = sizeof(clientAddr1);
-    int client1Socket = accept(sock, (sockaddr*)&clientAddr1, &clientAddr1Size);
+    int client1Socket = acceptClient(sock, &clientAddr1);
     if (client1Socket == -1)
-    {
-        cout << "Client 1 Socket failed!" << endl;
-        close(sock);
         return 1;
-    }
-    cout << "Client 1 Connected successfully!" << endl;
 
     sockaddr_in clientAddr2{};
-
-    socklen_t clientAddr2Size = sizeof(clientAddr2);
-    int client2Socket = accept(sock, (sockaddr*)&clientAddr2, &clientAddr2Size);
+    int client2Socket = acceptClient(sock, &clientAddr2);
     if (client2Socket == -1)
-    {
-        cout << "Client 2 Socket failed!" << endl;
-        close(sock);
-        close(client1Socket);
         return 1;
-    }
-    cout << "Client 2 Connected successfully!" << endl;
 
     while (true)
     {
-        int result1 = Send_msg(client1Socket, client2Socket);
+        int result1 = forwardMessage(client1Socket, client2Socket);
         if (result1 == -1)
         {
             cout << "send msg failed!" << endl;
@@ -95,7 +115,7 @@ int main()
         else if (result1 == 0)
             break;
 
-        int result2 = Send_msg(client2Socket, client1Socket);
+        int result2 = forwardMessage(client2Socket, client1Socket);
         if (result2 == -1)
         {
             cout << "send msg failed!" << endl;
@@ -107,6 +127,7 @@ int main()
         else if (result2 == 0)
             break;
     }
+
     close(sock);
     close(client1Socket);
     close(client2Socket);

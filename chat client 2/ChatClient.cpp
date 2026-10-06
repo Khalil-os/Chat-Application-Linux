@@ -7,61 +7,95 @@
 
 using namespace std;
 
-int main()
+int createSocket(sockaddr_in *serverAddr)
 {
     int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
 
     if (clientSocket == -1)
     {
         cout << "Socket failed!" << endl;
-        return 1;
+        return -1;
     }
     cout << "socket initialized successfully!" << endl;
     
-    sockaddr_in serverAddr{};
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(5000);
+    
+    serverAddr->sin_family = AF_INET;
+    serverAddr->sin_port = htons(5000);
 
-    if (inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr) != 1)
+    if (inet_pton(AF_INET, "127.0.0.1", &serverAddr->sin_addr) != 1)
     {
         cout << "Inet Pton failed!" << endl;
         close(clientSocket);
-        return 1;
+        return -1;
     }
 
-    if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != 0)
+    return clientSocket;
+}
+
+bool connectToServer(int clientSocket, sockaddr_in *serverAddr)
+{
+    if (connect(clientSocket, (sockaddr*)serverAddr, sizeof(*serverAddr)) != 0)
     {
         cout << "Connect failed!" << endl;
         close(clientSocket);
-        return 1;
+        return false;
     }
     cout << "Connect initialized successfully!" << endl;
+    return true;
+}
+
+bool sendMessage(int clientSocket)
+{
+    string msg;
+    cout << endl << "Enter msg to send to client 1 : ";
+    getline(cin, msg);
+    if (send(clientSocket, msg.c_str(), msg.size(), 0) == -1)
+    {
+        cout << "Send failed!" << endl;
+        close(clientSocket);
+        return false;
+    }
+    cout << endl;
+    return true;
+}
+
+int receiveMessage(int clientSocket)
+{
+    char buffer[1024];
+    int result = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (result == -1)
+    {
+        cout << "send msg failed!" << endl;
+        close(clientSocket);
+        return -1;
+    }
+    else if (result == 0)
+        return 0;
+    buffer[result] = '\0';
+    cout << "Client 1 : " << buffer << endl;
+    return 1;
+}
+
+int main()
+{
+    sockaddr_in serverAddr{};
+    int clientSocket = createSocket(&serverAddr);
+    if (clientSocket == -1)
+        return 1;
+    
+    if (!connectToServer(clientSocket, &serverAddr))
+        return 1;
 
     while (true)
     {
-        string msg;
-        cout << endl << "Enter msg to send to client 1 : ";
-        getline(cin, msg);
-        if (send(clientSocket, msg.c_str(), msg.size(), 0) == -1)
-        {
-            cout << "Send failed!" << endl;
-            close(clientSocket);
+        if (!sendMessage(clientSocket))
             return 1;
-        }
-        cout << endl;
 
-        char buffer[1024];
-        int result = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        if (result == -1)
-        {
-            cout << "send msg failed!" << endl;
-            close(clientSocket);
+        int msg = receiveMessage(clientSocket);
+        if (msg == -1)
             return 1;
-        }
-        else if (result == 0)
+        else if(msg == 0)
             break;
-        buffer[result] = '\0';
-        cout << "Client 1 : " << buffer << endl;
     }
     
     close(clientSocket);
