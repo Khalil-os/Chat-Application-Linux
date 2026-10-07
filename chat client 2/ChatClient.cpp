@@ -4,8 +4,12 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <thread>
+#include <mutex>
 
 using namespace std;
+
+mutex coutMutex;
 
 int createSocket(sockaddr_in *serverAddr)
 {
@@ -44,36 +48,44 @@ bool connectToServer(int clientSocket, sockaddr_in *serverAddr)
     return true;
 }
 
-bool sendMessage(int clientSocket)
+void sendMessage(int clientSocket)
 {
-    string msg;
-    cout << endl << "Enter msg to send to client 1 : ";
-    getline(cin, msg);
-    if (send(clientSocket, msg.c_str(), msg.size(), 0) == -1)
+    while (true)
     {
-        cout << "Send failed!" << endl;
-        close(clientSocket);
-        return false;
+        string msg;
+        {
+            lock_guard<mutex> lock(coutMutex);
+            cout << endl << "Enter msg to send to client 1 : ";
+        }
+        getline(cin, msg);
+        if (send(clientSocket, msg.c_str(), msg.size(), 0) == -1)
+        {
+            cout << "Send failed!" << endl;
+            close(clientSocket);
+            return;
+        }
+        cout << endl;
     }
-    cout << endl;
-    return true;
 }
 
-int receiveMessage(int clientSocket)
+void receiveMessage(int clientSocket)
 {
-    char buffer[1024];
-    int result = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (result == -1)
+    while (true)
     {
-        cout << "send msg failed!" << endl;
-        close(clientSocket);
-        return -1;
+        char buffer[1024];
+        int result = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        if (result == -1)
+        {
+            cout << "Receive failed!" << endl;
+            close(clientSocket);
+            return;
+        }
+        else if (result == 0)
+            return;
+        buffer[result] = '\0';
+        lock_guard<mutex> lock(coutMutex);
+        cout << "Client 1 : " << buffer << endl;
     }
-    else if (result == 0)
-        return 0;
-    buffer[result] = '\0';
-    cout << "Client 1 : " << buffer << endl;
-    return 1;
 }
 
 int main()
@@ -86,17 +98,12 @@ int main()
     if (!connectToServer(clientSocket, &serverAddr))
         return 1;
 
-    while (true)
-    {
-        if (!sendMessage(clientSocket))
-            return 1;
+    thread Send(sendMessage, clientSocket);
+    thread Recv(receiveMessage, clientSocket);
 
-        int msg = receiveMessage(clientSocket);
-        if (msg == -1)
-            return 1;
-        else if(msg == 0)
-            break;
-    }
+    Send.join();
+
+    Recv.join();
     
     close(clientSocket);
     return 0;

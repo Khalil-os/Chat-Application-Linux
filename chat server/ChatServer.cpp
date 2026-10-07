@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <thread>
 
 #define backlog 5
 
@@ -63,19 +64,21 @@ int acceptClient(int sock, sockaddr_in *clientAddr)
     return clientSocket;
 }
 
-int forwardMessage(int client1Socket, int client2Socket)
+void forwardMessage(int client1Socket, int client2Socket)
 {
-    char buffer[1024];
-    int result = recv(client1Socket, buffer, sizeof(buffer) - 1, 0);
-    if (result == -1)
-        return -1;
-    else if (result == 0)
-        return 0;
-    
-    buffer[result] = '\0';
-    if (send(client2Socket, buffer, result, 0) == -1)
-        return -1;
-    return 1;
+    while (true)
+    {
+        char buffer[1024];
+        int result = recv(client1Socket, buffer, sizeof(buffer) - 1, 0);
+        if (result == -1)
+            return ;
+        else if (result == 0)
+            return;
+        
+        buffer[result] = '\0';
+        if (send(client2Socket, buffer, result, 0) == -1)
+            return ;
+    }
 }
 
 int main()
@@ -101,32 +104,11 @@ int main()
     if (client2Socket == -1)
         return 1;
 
-    while (true)
-    {
-        int result1 = forwardMessage(client1Socket, client2Socket);
-        if (result1 == -1)
-        {
-            cout << "send msg failed!" << endl;
-            close(sock);
-            close(client1Socket);
-            close(client2Socket);
-            return 1;
-        }
-        else if (result1 == 0)
-            break;
+    thread t1(forwardMessage, client1Socket, client2Socket);
+    thread t2(forwardMessage, client2Socket, client1Socket);
 
-        int result2 = forwardMessage(client2Socket, client1Socket);
-        if (result2 == -1)
-        {
-            cout << "send msg failed!" << endl;
-            close(sock);
-            close(client1Socket);
-            close(client2Socket);
-            return 1;
-        }
-        else if (result2 == 0)
-            break;
-    }
+    t1.join();
+    t2.join();
 
     close(sock);
     close(client1Socket);
