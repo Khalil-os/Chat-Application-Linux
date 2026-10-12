@@ -1,17 +1,11 @@
 #include <iostream>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <thread>
-
-#define backlog 5
+#include <ChatServer.h>
 
 using namespace std;
 
-int createServerSocket(sockaddr_in *serverAddr)
+int ChatServer::createServerSocket()
 {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    sock = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sock == -1)
     {
@@ -20,15 +14,15 @@ int createServerSocket(sockaddr_in *serverAddr)
     }
     cout << "socket initialized successfully!" << endl;
     
-    serverAddr->sin_family = AF_INET;
-    serverAddr->sin_port = htons(5000);
-    serverAddr->sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(5000);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
     return sock;
 }
 
-bool bindServer(int sock, sockaddr_in *serverAddr)
+bool ChatServer::bindServer()
 {
-    if (bind(sock, (sockaddr*)serverAddr, sizeof(*serverAddr)) == -1)
+    if (bind(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1)
     {
         cout << "Bind failed !" << endl;
         close(sock);
@@ -38,7 +32,7 @@ bool bindServer(int sock, sockaddr_in *serverAddr)
     return true;
 }
 
-bool listenServer(int sock)
+bool ChatServer::listenServer()
 {
     if (listen(sock, backlog) == -1)
     {
@@ -50,10 +44,10 @@ bool listenServer(int sock)
     return true;
 }
 
-int acceptClient(int sock, sockaddr_in *clientAddr)
+int ChatServer::acceptClient(sockaddr_in &clientAddr)
 {
-    socklen_t clientAddr1Size = sizeof(*clientAddr);
-    int clientSocket = accept(sock, (sockaddr*)clientAddr, &clientAddr1Size);
+    socklen_t clientAddr1Size = sizeof(clientAddr);
+    int clientSocket = accept(sock, (sockaddr*)&clientAddr, &clientAddr1Size);
     if (clientSocket == -1)
     {
         cout << "Client Socket failed!" << endl;
@@ -64,7 +58,7 @@ int acceptClient(int sock, sockaddr_in *clientAddr)
     return clientSocket;
 }
 
-void forwardMessage(int client1Socket, int client2Socket)
+void ChatServer::forwardMessage(int client1Socket, int client2Socket)
 {
     while (true)
     {
@@ -81,37 +75,21 @@ void forwardMessage(int client1Socket, int client2Socket)
     }
 }
 
-int main()
+int ChatServer::getSock()
 {
-    sockaddr_in serverAddr{};
-    int sock = createServerSocket(&serverAddr);
-    if (sock == -1)
-        return 1;
+    return sock;
+}
 
-    if (!bindServer(sock, &serverAddr))
-        return 1;
+sockaddr_in ChatServer::getServerAddr()
+{
+    return serverAddr;
+}
 
-    if (!listenServer(sock))
-        return 1;
-    
-    sockaddr_in clientAddr1{};
-    int client1Socket = acceptClient(sock, &clientAddr1);
-    if (client1Socket == -1)
-        return 1;
-
-    sockaddr_in clientAddr2{};
-    int client2Socket = acceptClient(sock, &clientAddr2);
-    if (client2Socket == -1)
-        return 1;
-
-    thread t1(forwardMessage, client1Socket, client2Socket);
-    thread t2(forwardMessage, client2Socket, client1Socket);
-
-    t1.join();
-    t2.join();
-
-    close(sock);
-    close(client1Socket);
-    close(client2Socket);
-    return 0;
+void ChatServer::closeSock()
+{
+    if (sock != -1)
+    {
+        close(sock);
+        sock = -1;
+    }
 }
