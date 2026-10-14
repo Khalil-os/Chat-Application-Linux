@@ -15,7 +15,7 @@ int ChatClient::createSocket(sockaddr_in &serverAddr)
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(5000);
 
-    if (inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr) != 1)
+    if (inet_pton(AF_INET, "192.168.1.103", &serverAddr.sin_addr) != 1)
     {
         cout << "Inet Pton failed!" << endl;
         close(clientSocket);
