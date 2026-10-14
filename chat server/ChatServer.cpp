@@ -1,22 +1,28 @@
+#include "ChatServer.h"
 #include <iostream>
-#include <ChatServer.h>
 
-using namespace std;
-
-int ChatServer::createServerSocket()
+int ChatServer::createServerSocket(int port)
 {
     sock = socket(AF_INET, SOCK_STREAM, 0);
-
     if (sock == -1)
     {
-        cout << "Socket failed!" << endl;
+        std::cout << "Socket failed!" << std::endl;
         return -1;
     }
-    cout << "socket initialized successfully!" << endl;
-    
+
+    int opt = 1;
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1)
+    {
+        std::cout << "setsockopt(SO_REUSEADDR) failed!" << std::endl;
+        close(sock);
+        sock = -1;
+        return -1;
+    }
+
     serverAddr.sin_family = AF_INET;
-    serverAddr.sin_port = htons(5000);
+    serverAddr.sin_port = htons(port);
     serverAddr.sin_addr.s_addr = INADDR_ANY;
+    std::cout << "Socket initialized successfully!" << std::endl;
     return sock;
 }
 
@@ -24,37 +30,38 @@ bool ChatServer::bindServer()
 {
     if (bind(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1)
     {
-        cout << "Bind failed !" << endl;
+        std::cout << "Bind failed!" << std::endl;
         close(sock);
+        sock = -1;
         return false;
     }
-    cout << "Bind initialized successfully!" << endl;
+    std::cout << "Bind initialized successfully!" << std::endl;
     return true;
 }
 
 bool ChatServer::listenServer()
 {
-    if (listen(sock, backlog) == -1)
+    if (listen(sock, BACKLOG) == -1)
     {
-        cout << "Listen failed !" << endl;
+        std::cout << "Listen failed!" << std::endl;
         close(sock);
+        sock = -1;
         return false;
     }
-    cout << "Listen initialized successfully!" << endl;
+    std::cout << "Listen initialized successfully!" << std::endl;
     return true;
 }
 
 int ChatServer::acceptClient(sockaddr_in &clientAddr)
 {
-    socklen_t clientAddr1Size = sizeof(clientAddr);
-    int clientSocket = accept(sock, (sockaddr*)&clientAddr, &clientAddr1Size);
+    socklen_t clientAddrSize = sizeof(clientAddr);
+    int clientSocket = accept(sock, (sockaddr*)&clientAddr, &clientAddrSize);
     if (clientSocket == -1)
     {
-        cout << "Client Socket failed!" << endl;
-        close(sock);
+        std::cout << "accept() failed!" << std::endl;
         return -1;
     }
-    cout << "Client Connected successfully!" << endl;
+    std::cout << "Client connected successfully! (fd=" << clientSocket << ")" << std::endl;
     return clientSocket;
 }
 
@@ -64,23 +71,26 @@ void ChatServer::forwardMessage(int client1Socket, int client2Socket)
     {
         char buffer[1024];
         int result = recv(client1Socket, buffer, sizeof(buffer) - 1, 0);
-        if (result == -1)
-            return ;
-        else if (result == 0)
+        if (result <= 0)
+        {
+            shutdown(client2Socket, SHUT_RDWR);
             return;
-        
+        }
         buffer[result] = '\0';
         if (send(client2Socket, buffer, result, 0) == -1)
-            return ;
+        {
+            shutdown(client1Socket, SHUT_RDWR);
+            return;
+        }
     }
 }
 
-int ChatServer::getSock()
+int ChatServer::getSock() const
 {
     return sock;
 }
 
-sockaddr_in ChatServer::getServerAddr()
+sockaddr_in ChatServer::getServerAddr() const
 {
     return serverAddr;
 }

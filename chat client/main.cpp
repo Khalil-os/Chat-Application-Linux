@@ -1,37 +1,61 @@
 #include <thread>
 #include <iostream>
-#include <functional>
+#include <string>
+#include <csignal>
 #include "ChatClient.h"
 
-using namespace std;
+static ChatClient *g_client = nullptr;
 
-int main()
+void handleSigint(int)
 {
+    if (g_client) g_client->stop();
+}
+
+int main(int argc, char *argv[])
+{
+    std::string ip = "127.0.0.1";
+    int port = 5000;
+
+    if (argc >= 2) ip = argv[1];
+    if (argc >= 3)
+    {
+        try { port = std::stoi(argv[2]); }
+        catch (...) { std::cerr << "Invalid port, using 5000\n"; port = 5000; }
+    }
+
+    ChatClient client;
+    g_client = &client;
+    std::signal(SIGINT, handleSigint);
+    std::signal(SIGTERM, handleSigint);
+
+    sockaddr_in serverAddr{};
+    if (client.createSocket(serverAddr, ip, port) == -1)
+        return 1;
+
+    std::cout << "Connecting to " << ip << ":" << port << "..." << std::endl;
+    if (!client.connectToServer(serverAddr))
+        return 1;
+    std::cout << "Connected!" << std::endl;
+
     initscr();
     cbreak();
     noecho();
+    keypad(stdscr, TRUE);
 
     ChatUI UI;
     UI.initWindows();
 
-    ChatClient Client;
-    
-    sockaddr_in serverAddr{};
+    std::thread tSend(&ChatClient::sendMessage, &client, std::ref(UI));
+    std::thread tRecv(&ChatClient::receiveMessage, &client, std::ref(UI));
 
-    if (Client.createSocket(serverAddr) == -1)
-        return 1;
-    
-    if (!Client.connectToServer(serverAddr))
-        return 1;
+    tSend.join();
+    client.stop();
+    tRecv.join();
 
-    thread Send(&ChatClient::sendMessage, &Client, ref(UI));
-    thread Recv(&ChatClient::receiveMessage, &Client, ref(UI));
-
-    Send.join();
-    Recv.join();
-    
     UI.closeWin();
-    Client.closeSock();
-    
+    client.closeSock();
+    g_client = nullptr;
+
+    std::cout << "Disconnected. Bye!" << std::endl;
     return 0;
 }

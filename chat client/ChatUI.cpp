@@ -1,43 +1,66 @@
 #include "ChatUI.h"
+#include <mutex>
 
 void ChatUI::displayMessages()
 {
+    std::lock_guard<std::mutex> lock(mtx);
+
     werase(chatWin);
     box(chatWin, 0, 0);
     mvwprintw(chatWin, 1, 2, "Chat Messages");
 
     int maxMessages = chatHeight - 4;
     int start = 0;
-
     if ((int)messages.size() > maxMessages)
-        start = messages.size() - maxMessages;
+        start = (int)messages.size() - maxMessages;
 
-    int cols = getmaxx(chatWin);
+    int winCols = getmaxx(chatWin);
+    int usable = winCols - 4;
+    if (usable < 1) usable = 1;
+
     int line = 3;
-
     for (int j = start; j < (int)messages.size(); j++)
     {
         int clientId = messages[j].first;
-        string msg = messages[j].second;
+        std::string msg = messages[j].second;
+        std::string prefix = (clientId == 1) ? "You: " : "Other: ";
+        std::string text = prefix + msg;
 
-        string text = "Client " + to_string(clientId) + ": " + msg;
-
-        int x;
-
-        if (clientId == 1)
-            x = cols - text.length() - 2;
-        else
-            x = 2;
-
-        if (x < 1)
-            x = 1;
-
-        mvwprintw(chatWin, line, x, "%s", text.c_str());
-
+        // wrap long messages
+        int offset = 0;
+        bool firstLine = true;
+        while (offset < (int)text.length() && line < chatHeight - 1)
+        {
+            std::string chunk = text.substr(offset, usable);
+            int x;
+            if (clientId == 1 && firstLine)
+            {
+                x = winCols - (int)chunk.length() - 2;
+                if (x < 1) x = 1;
+            }
+            else
+            {
+                x = 2;
+            }
+            mvwprintw(chatWin, line, x, "%s", chunk.c_str());
+            offset += usable;
+            firstLine = false;
+            if (offset < (int)text.length())
+                line++;
+        }
         line++;
+        if (line >= chatHeight - 1) break;
     }
-
     wrefresh(chatWin);
+}
+
+void ChatUI::addMessage(int id, const std::string &msg)
+{
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        messages.emplace_back(id, msg);
+    }
+    displayMessages();
 }
 
 void ChatUI::initWindows()
@@ -63,9 +86,15 @@ void ChatUI::initWindows()
 
 void ChatUI::closeWin()
 {
-    delwin(chatWin);
-    chatWin = nullptr;
-    delwin(inputWin);
-    inputWin = nullptr;
+    if (chatWin)
+    {
+        delwin(chatWin);
+        chatWin = nullptr;
+    }
+    if (inputWin)
+    {
+        delwin(inputWin);
+        inputWin = nullptr;
+    }
     endwin();
 }

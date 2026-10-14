@@ -2,23 +2,26 @@
 
 #include <ncurses.h>
 #include <vector>
-#include <utility>
 #include <string>
-
-using namespace std;
+#include <utility>
+#include <mutex>
 
 class ChatUI
 {
     private:
         int chatHeight = 0;
         int cols = 0;
-    
+        std::mutex mtx;
+
     public:
-        vector<pair<int, string>> messages;
+        std::vector<std::pair<int, std::string>> messages;
         WINDOW *chatWin = nullptr;
         WINDOW *inputWin = nullptr;
-        
+
         void initWindows();
         void displayMessages();
+        void addMessage(int id, const std::string &msg);
         void closeWin();
+
+        std::mutex &getMutex() { return mtx; }
 };
